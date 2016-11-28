@@ -29,9 +29,9 @@ model {
             cppFlags.add("-O3")
             cppFlags.add("-Os")
             cppFlags.add("-fvisibility=hidden")
-            platformVersion = 19
-            ldFlags.add("-lcrypto")
-            abiFilters.add("armeabi")
+//            platformVersion = 19
+//            ldFlags.add("-lcrypto")
+//            abiFilters.add("armeabi")
 
         }
 

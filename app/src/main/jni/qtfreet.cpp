@@ -1,15 +1,16 @@
 #include "Android/vm/oo/Object.h"
 #include "Android/libdex/DexClass.h"
 #include "AntiDebug/antidebug.h"
-#include "Crypto/AES/aes.h"
+#include "EncryptUtils/AES/aes.h"
 #include <asm-generic/mman-common.h>
 #include <sys/mman.h>
-#include "Crypto/RC4/RC4Utils.h"
-#include "Crypto/Base64/Base64.h"
-#include "Crypto/Md5/Md5Utils.h"
+#include "EncryptUtils/RC4/RC4Utils.h"
+#include "EncryptUtils/Base64/Base64.h"
+#include "EncryptUtils/Md5/Md5Utils.h"
 #include "Utils/Utils.h"
 #include <iostream>
 #include <map>
+
 
 #define opCodeA 90
 #define opCodeB 91

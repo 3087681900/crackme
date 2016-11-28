@@ -5,7 +5,7 @@
 #include <string.h>
 #include "AesUtils.h"
 #include "aes.h"
-#include "../Base64/Base64.h"
+
 
 unsigned char *AesEncrypt(unsigned char *buf, unsigned char *aes_keybuf) {
     AES_KEY aes;

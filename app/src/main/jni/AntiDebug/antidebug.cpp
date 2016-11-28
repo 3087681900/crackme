@@ -2,6 +2,9 @@
 #include <android/log.h>
 #include <sys/syscall.h>
 #include <sys/inotify.h>
+#include<pthread.h>
+#include<sys/prctl.h>
+#include<sys/wait.h>
 
 #define CHECK_TIME 10
 #define MAX 128
@@ -24,7 +27,7 @@ int getWchanStatus() {
     FILE *ptr;
     if ((ptr = popen(cmd, "r")) != NULL) {
         if (fgets(wchaninfo, 128, ptr) != NULL) {
-//            LOGE("wchaninfo= %s", wchaninfo);
+            LOGE("wchaninfo= %s", wchaninfo);
         }
     }
     if (strncasecmp(wchaninfo, "sys_epoll\0", strlen("sys_epoll\0")) == 0) {
@@ -35,6 +38,82 @@ int getWchanStatus() {
     }
     return result;
 }
+
+
+void CalcTime(int res, int des) {
+    int pid = getpid();
+    if (des - res >= 2) {
+        kill(pid, SIGKILL);
+    } else {
+
+    }
+
+
+}
+
+void checkAndroidServer() {
+    char szLines[1024] = {0};
+    //监听23946端口
+    FILE *fp = fopen("/proc/net/tcp", "r");
+    if (fp != NULL) {
+        while (fgets(szLines, sizeof(szLines), fp)) {
+            //23946端口
+            if (strstr(szLines, "00000000:5D8A")) {
+                kill(getpid(), SIGKILL);
+                break;
+            }
+        }
+
+        fclose(fp);
+    }
+
+    LOGE("no find android server");
+}
+
+void readStatus() {
+    FILE *fd;
+    char filename[MAX];
+    char line[MAX];
+    pid_t pid = syscall(__NR_getpid);
+    int ret = getWchanStatus();
+    if (2 == ret) {
+        kill(pid, SIGKILL);
+    }
+    sprintf(filename, "/proc/%d/status", pid);// 读取proc/pid/status中的TracerPid
+    if (fork() == 0) {
+        int pt;
+        pt = ptrace(PTRACE_TRACEME, 0, 0, 0); //子进程反调试
+        if (pt == -1)
+            exit(0);
+        while (1) {
+            checkAndroidServer();
+            fd = fopen(filename, "r");
+            while (fgets(line, MAX, fd)) {
+                if (strncmp(line, "TracerPid", 9) == 0) {
+                    int statue = atoi(&line[10]);
+//                    LOGE("########## statue = %d,%s", statue, line);
+                    fclose(fd);
+                    syscall(__NR_close, fd);
+                    if (statue != 0) {
+                        // LOGE("########## here");
+                        int ret = kill(pid, SIGKILL);
+                        // LOGE("########## kill = %d", ret);
+                        return;
+                    }
+
+                    break;
+                }
+            }
+            sleep(CHECK_TIME);
+        }
+    } else {
+//        LOGE("fork error");
+    }
+}
+
+
+//以下方法暂不清楚如何利用
+
 
 void AntiDebug() {
     // LOGE("Call inotify");
@@ -67,7 +146,7 @@ void AntiDebug() {
             break;
         if (ret) {
             len = read(fd, readbuf, MAX);
-//            LOGE("come in!");
+            LOGE("come in!");
 
             while (i < len) {
                 //   LOGE("comeeeeee i n ...");
@@ -91,56 +170,177 @@ void AntiDebug() {
     close(fd);
 }
 
-void CalcTime(int res, int des) {
-    int pid = getpid();
-    if (des - res >= 2) {
-        kill(pid, SIGKILL);
-    } else {
+int gpipe[2];
 
+void *parent_read_thread(void *param) {
+    LOGD("wait for child process to write decode data");
+    int readPipe = gpipe[0];
+    read(readPipe, 0, 0x10);
+    close(readPipe);
+    return 0;
+}
+
+void *child_attach_thread(void *param) {
+    int pid = *(int *) param;
+    LOGD("check child status %d", pid);
+    safe_attach(pid);
+    handle_events();
+    LOGE("watch thread exit");
+
+    kill(getpid(), 9);
+}
+
+
+int checkDebugger() {
+// use Multi process to protect itself
+    int forktime = 0;
+
+    FORKLABEL:
+    forktime++;
+    if (forktime > 5) {
+        return 0;
     }
 
+    if (pipe(gpipe)) {
+        return 0;
+    }
+    int pid = fork();
+    prctl(PR_SET_DUMPABLE, 1);
+
+    if (pid != 0) {
+        // parent
+        close(gpipe[1]);
+        LOGD("start new thread to read decode data");
+        pthread_t ntid;
+        pthread_create(&ntid, NULL, parent_read_thread, &pid);
+        bool flag = false;
+        do {
+            int childstatus;
+            int childpid = waitpid(pid, &childstatus, WNOHANG);
+            bool succ = childpid == 0;
+            if (childpid > 0) {
+                succ = childstatus == 1;
+                LOGD("Child process end!");
+            }
+            if (!succ) {
+                kill(pid, 9);
+                goto FORKLABEL;
+            }
+            flag = true;
+        } while (!flag);
+    } else {
+        // child
+        // Write key to pipe
+        int cpid = getppid();
+        safe_attach(cpid);
+        LOGD("child process Attach success, try to write data");
+
+        close(gpipe[0]);
+        int writepipe = gpipe[1];
+
+        char tflag[0x10 + 1] = {
+                0x4A, 0x75, 0x73, 0x74, 0x48, 0x61, 0x76, 0x65,
+                0x41, 0x54, 0x72, 0x79, 0x21, 0x21, 0x21, 0x21
+        };
+
+        write(writepipe, tflag, 0x10);
+        close(writepipe);
+        handle_events();
+        exit(EXIT_FAILURE);
+
+    }
+    return 0;
+}
+
+bool may_cause_group_stop(int signo) {
+    switch (signo) {
+        case SIGSTOP:
+        case SIGTSTP:
+        case SIGTTIN:
+        case SIGTTOU:
+            return true;
+            break;
+        default:
+            break;
+    }
+
+    return false;
+}
+
+void handle_events() {
+    int status = 0;
+    pid_t pid = 0;
+
+    do {
+        pid = TEMP_FAILURE_RETRY(waitpid(-1, &status, __WALL));
+        if (pid < 0) {
+            perror("waitpid");
+            exit(EXIT_FAILURE);
+        }
+
+        if (WIFEXITED(status)) {
+            LOGE("%d exited, status=%d\n", pid, WEXITSTATUS(status));
+        }
+        else if (WIFSIGNALED(status)) {
+            LOGE("%d killed by signal %d\n", pid, WTERMSIG(status));
+        }
+        else if (WIFSTOPPED(status)) {
+            int signo = WSTOPSIG(status);
+            LOGE("%d stopped by signal %d\n", pid, signo);
+
+            if (may_cause_group_stop(signo)) {
+                signo = 0;
+            }
+
+            long err = ptrace(PTRACE_CONT, pid, NULL, signo);
+            if (err < 0) {
+                perror("PTRACE_CONT");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+    } while (!WIFEXITED(status) && !WIFSIGNALED(status));
 
 }
 
-void readStatus() {
-    FILE *fd;
-    char filename[MAX];
-    char line[MAX];
-    pid_t pid = syscall(__NR_getpid);
-    int ret = getWchanStatus();
-    if (2 == ret) {
-        kill(pid, SIGKILL);
+void safe_attach(pid_t pid) {
+    long err = ptrace(PTRACE_ATTACH, pid, NULL, NULL);
+    if (err < 0) {
+        LOGE("PTRACE_ATTACH");
+        exit(EXIT_FAILURE);
     }
-    sprintf(filename, "/proc/%d/status", pid);// 读取proc/pid/status中的TracerPid
-    if (fork() == 0) {
-        int pt;
-        pt = ptrace(PTRACE_TRACEME, 0, 0, 0); //子进程反调试
-        if (pt == -1)
-            exit(0);
-//        LOGE("jklasjkldjkldjaskjdlkas");
-        while (1) {
-            fd = fopen(filename, "r");
-            while (fgets(line, MAX, fd)) {
-                if (strncmp(line, "TracerPid", 9) == 0) {
-                    int statue = atoi(&line[10]);
-//                    LOGE("########## statue = %d,%s", statue, line);
-                    fclose(fd);
-                    syscall(__NR_close, fd);
-                    if (statue != 0) {
-                        // LOGE("########## here");
-                        int ret = kill(pid, SIGKILL);
-                        // LOGE("########## kill = %d", ret);
-                        return;
-                    }
 
-                    break;
-                }
-            }
-            sleep(CHECK_TIME);
-        }
-    } else {
-//        LOGE("fork error");
+    int status = 0;
+    err = TEMP_FAILURE_RETRY(waitpid(pid, &status, __WALL));
+    if (err < 0) {
+        LOGE("waitpid");
+        exit(EXIT_FAILURE);
     }
+
+    if (WIFEXITED(status)) {
+        LOGE("%d exited, status=%d\n", pid, WEXITSTATUS(status));
+        exit(EXIT_SUCCESS);
+    }
+    else if (WIFSIGNALED(status)) {
+        LOGE("%d killed by signal %d\n", pid, WTERMSIG(status));
+        exit(EXIT_SUCCESS);
+    }
+    else if (WIFSTOPPED(status)) {
+        int signo = WSTOPSIG(status);
+        LOGE("%d stopped by signal %d\n", pid, signo);
+
+        if (may_cause_group_stop(signo)) {
+            signo = 0;
+        }
+
+        err = ptrace(PTRACE_CONT, pid, NULL, signo);
+        if (err < 0) {
+            LOGE("PTRACE_CONT");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    LOGD("Debugger: attached to process %d\n", pid);
 }
 
 
