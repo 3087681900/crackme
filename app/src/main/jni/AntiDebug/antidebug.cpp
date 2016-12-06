@@ -111,7 +111,104 @@ void readStatus() {
     }
 }
 
+int event_check(int fd) {
+    fd_set rfds;
+    FD_ZERO(&rfds);
+    FD_SET(fd, &rfds);
 
+    return select(FD_SETSIZE, &rfds, NULL, NULL, NULL);
+}
+
+int read_event(int fd) {
+    char buffer[16384] = {0};
+    size_t index = 0;
+    struct inotify_event *ptr_event;
+
+    ssize_t r = read(fd, buffer, 16384);
+    if (r <= 0) {
+        LOGE("read_event");
+        return r;
+    }
+
+    while (index < r) {
+        ptr_event = (struct inotify_event *) &buffer[index];
+        LOGE("wd = %d mask = %d cookie = %d len = %d dir = %s\n",
+             ptr_event->wd, ptr_event->mask, ptr_event->cookie, ptr_event->len,
+             (ptr_event->mask & IN_ISDIR) ? "yes" : "no");
+        if (ptr_event->len)
+            LOGE("name = %s", ptr_event->name);
+        index += sizeof(struct inotify_event) + ptr_event->len;
+    }
+    return 0;
+}
+
+void signal_handle(int sum) {
+    LOGE("Task ============== Start");
+}
+
+void runInotify() {
+    int keep_running = 1;
+
+    if (signal(SIGINT, signal_handle) == SIG_IGN) {
+        signal(SIGINT, SIG_IGN);
+
+    }
+    int fd;
+    fd = inotify_init();//初始化
+    if (fd == -1) { //错误处理
+        LOGE("inotify_init error");
+        switch (errno) {
+            case EMFILE:
+                LOGE("errno: EMFILE");
+                break;
+            case ENFILE:
+                LOGE("errno: ENFILE");
+                break;
+            case ENOMEM:
+                LOGE("errno: ENOMEM");
+                break;
+            default:
+                LOGE("unkonw errno");
+
+        }
+        return;
+    }
+    int wd;
+    wd = inotify_add_watch(fd, "/data/data/com.qtfreet.crackme001/lib", IN_ALL_EVENTS); //添加监视
+    if (wd == -1) { //错误处理
+        LOGE("inotify_add_watch");
+        switch (errno) {
+            case EACCES:
+                LOGE("errno: EACCES");
+                break;
+            case EBADF:
+                LOGE("errno: EBADF");
+                break;
+            case EFAULT:
+                LOGE("errno: EFAULT");
+                break;
+            case EINVAL:
+                LOGE("errno: EINVAL");
+                break;
+            case ENOMEM:
+                LOGE("errno: ENOMEM");
+                break;
+            case ENOSPC:
+                LOGE("errno: ENOSPC");
+                break;
+            default:
+                LOGE("unkonw errno");
+        }
+        return;
+    }
+
+    while (keep_running) {
+        if (event_check(fd) > 0) {
+            read_event(fd);
+        }
+    }
+    return;
+}
 //以下方法暂不清楚如何利用
 
 
