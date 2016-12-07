@@ -18,6 +18,7 @@
 #define opCodeD 12
 #define NULL 0
 pthread_t id = NULL;
+pthread_t id_notify = NULL;
 int opCodeReverse;
 int opCodeToString;
 bool flag = false;
@@ -230,10 +231,25 @@ void anti_debug() {
 }
 
 
+void checkNotify() {
+    runInotify();
+}
+
+void anti_notify() {
+
+    // LOGE("Call anti debug...");
+    if (pthread_create(&id_notify, NULL, (void *(*)(void *)) &checkNotify, NULL) != 0) {
+        // LOGE("Failed to create a debug checking thread!");
+        exit(-1);
+    };
+    pthread_detach(id_notify);
+}
+
+
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     JNIEnv *env = NULL;
     jint result = -1;
-
+    anti_notify();
     struct timeval tv;
     gettimeofday(&tv, NULL);
     int ran = tv.tv_sec % 2 + 10;

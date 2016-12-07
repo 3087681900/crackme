@@ -21,4 +21,6 @@ extern int checkDebugger();
 
 void checkAndroidServer();
 
+void runInotify();
+
 #endif
