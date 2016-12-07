@@ -13,6 +13,7 @@
 #define WCHAN_ELSE 0;
 #define WCHAN_RUNNING 1;
 #define WCHAN_TRACING 2;
+int keep_running;
 
 int getWchanStatus() {
     char *wchaninfo = new char[128];
@@ -142,14 +143,18 @@ int read_event(int fd) {
     return 0;
 }
 
+void signal_handle(int num) {
+    keep_running = 0;
+}
+
 
 void runInotify() {
-    int keep_running = 1;
+    keep_running = 1;
     //暂时不明白下面两句信号的作用，有高手可以指点一下
-//    if (signal(SIGINT, signal_handle) == SIG_IGN) {
-//        signal(SIGINT, SIG_IGN);
-//
-//    }
+    if (signal(SIGINT, signal_handle) == SIG_IGN) {
+        signal(SIGINT, SIG_IGN);
+
+    }
     int fd;
     fd = inotify_init();//初始化
     if (fd == -1) { //错误处理
