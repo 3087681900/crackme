@@ -5,6 +5,10 @@
 #include<pthread.h>
 #include<sys/prctl.h>
 #include<sys/wait.h>
+#include <signal.h>
+#include <errno.h>
+#include <sys/queue.h>
+#include <sys/select.h>
 
 #define CHECK_TIME 10
 #define MAX 128
@@ -150,11 +154,11 @@ void signal_handle(int num) {
 
 void runInotify() {
     keep_running = 1;
-    //暂时不明白下面两句信号的作用，有高手可以指点一下
-    if (signal(SIGINT, signal_handle) == SIG_IGN) {
-        signal(SIGINT, SIG_IGN);
-
-    }
+    //这两行代码在sdk 20以下运行有问题
+//    if (signal(SIGINT, signal_handle) == SIG_IGN) {
+//        signal(SIGINT, SIG_IGN);
+//
+//    }
     int fd;
     fd = inotify_init();//初始化
     if (fd == -1) { //错误处理
