@@ -249,7 +249,7 @@ void anti_notify() {
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     JNIEnv *env = NULL;
     jint result = -1;
-    anti_notify();
+
     struct timeval tv;
     gettimeofday(&tv, NULL);
     int ran = tv.tv_sec % 2 + 10;
@@ -280,6 +280,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     initMap();
     anti_debug();
     init();
+    anti_notify();
+
     if (registerNativeMethods(env, gClassName, gMethods,
                               sizeof(gMethods) / sizeof(gMethods[0])) == JNI_FALSE) {
         return -1;

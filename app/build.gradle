@@ -1,12 +1,12 @@
 apply plugin: 'com.android.model.application'
 model {
     android {
-        compileSdkVersion 24
-        buildToolsVersion "24.0.3"
+        compileSdkVersion 25
+        buildToolsVersion "25.0.0"
         defaultConfig {
             applicationId "com.qtfreet.crackme001"
             minSdkVersion.apiLevel 15
-            targetSdkVersion.apiLevel 24
+            targetSdkVersion.apiLevel 25
             versionCode 1
             versionName "1.0"
             testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
@@ -29,7 +29,7 @@ model {
             cppFlags.add("-O3")
             cppFlags.add("-Os")
             cppFlags.add("-fvisibility=hidden")
-         //    platformVersion = 15
+            //     platformVersion = 19
 //            ldFlags.add("-lcrypto")
 //            abiFilters.add("armeabi")
 
@@ -43,6 +43,6 @@ dependencies {
     androidTestCompile('com.android.support.test.espresso:espresso-core:2.2.2', {
         exclude group: 'com.android.support', module: 'support-annotations'
     })
-    compile 'com.android.support:appcompat-v7:24.2.1'
+    compile 'com.android.support:appcompat-v7:25.0.0'
     testCompile 'junit:junit:4.12'
 }

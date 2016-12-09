@@ -1,14 +1,5 @@
 #include "antidebug.h"
-#include <android/log.h>
-#include <sys/syscall.h>
-#include <sys/inotify.h>
-#include<pthread.h>
-#include<sys/prctl.h>
-#include<sys/wait.h>
-#include <signal.h>
-#include <errno.h>
-#include <sys/queue.h>
-#include <sys/select.h>
+
 
 #define CHECK_TIME 10
 #define MAX 128
@@ -18,6 +9,10 @@
 #define WCHAN_RUNNING 1;
 #define WCHAN_TRACING 2;
 int keep_running;
+
+void signal_handle(int num) {
+    keep_running = 0;
+}
 
 int getWchanStatus() {
     char *wchaninfo = new char[128];
@@ -50,10 +45,7 @@ void CalcTime(int res, int des) {
     if (des - res >= 2) {
         kill(pid, SIGKILL);
     } else {
-
     }
-
-
 }
 
 void checkAndroidServer() {
@@ -116,6 +108,7 @@ void readStatus() {
     }
 }
 
+
 int event_check(int fd) {
     fd_set rfds;
     FD_ZERO(&rfds);
@@ -137,50 +130,57 @@ int read_event(int fd) {
 
     while (index < r) {
         ptr_event = (struct inotify_event *) &buffer[index];
-        LOGE("wd = %d mask = %d cookie = %d len = %d dir = %s\n",
-             ptr_event->wd, ptr_event->mask, ptr_event->cookie, ptr_event->len,
-             (ptr_event->mask & IN_ISDIR) ? "yes" : "no");
-        if (ptr_event->len)
-            LOGE("name = %s", ptr_event->name);
+//        LOGD("wd = %d mask = %d cookie = %d len = %d dir = %s\n",
+//             ptr_event->wd, ptr_event->mask, ptr_event->cookie, ptr_event->len,
+//             (ptr_event->mask & IN_ISDIR) ? "yes" : "no");
+//        if (ptr_event->len)
+//            LOGD("name = %s", ptr_event->name);
+        //此处监控事件的读和打开，如果出现则直接结束进程
+        if ((ptr_event->mask & IN_ACCESS) || (ptr_event->mask & IN_OPEN)) {
+            //    LOGD("kill!!!!!\n");
+            //事件出现则杀死父进程
+            LOGE("hhhahahahahahahahahaahah");
+            int ret = kill(getpid(), SIGKILL);
+            //  LOGD("ret = %d", ret);
+            return 0;
+        }
+
         index += sizeof(struct inotify_event) + ptr_event->len;
     }
     return 0;
 }
 
-void signal_handle(int num) {
-    keep_running = 0;
-}
-
-
 void runInotify() {
     keep_running = 1;
-    //这两行代码在sdk 20以下运行有问题
+    pid_t ppid = syscall(__NR_getpid);
 //    if (signal(SIGINT, signal_handle) == SIG_IGN) {
 //        signal(SIGINT, SIG_IGN);
-//
 //    }
+
     int fd;
+    char buf[1024];
     fd = inotify_init();//初始化
     if (fd == -1) { //错误处理
         LOGE("inotify_init error");
         switch (errno) {
             case EMFILE:
-                LOGE("errno: EMFILE");
+                LOGD("errno: EMFILE");
                 break;
             case ENFILE:
-                LOGE("errno: ENFILE");
+                LOGD("errno: ENFILE");
                 break;
             case ENOMEM:
-                LOGE("errno: ENOMEM");
+                LOGD("errno: ENOMEM");
                 break;
             default:
-                LOGE("unkonw errno");
-
+                LOGD("unkonw errno");
         }
         return;
     }
+
     int wd;
-    wd = inotify_add_watch(fd, "/data/data/com.qtfreet.crackme001/lib", IN_ALL_EVENTS); //添加监视
+    sprintf(buf, "/proc/%d/maps", ppid);
+    wd = inotify_add_watch(fd, buf, IN_ALL_EVENTS); //添加监视
     if (wd == -1) { //错误处理
         LOGE("inotify_add_watch");
         switch (errno) {
@@ -200,10 +200,10 @@ void runInotify() {
                 LOGE("errno: ENOMEM");
                 break;
             case ENOSPC:
-                LOGE("errno: ENOSPC");
+                LOGD("errno: ENOSPC");
                 break;
             default:
-                LOGE("unkonw errno");
+                LOGD("unkonw errno");
         }
         return;
     }
